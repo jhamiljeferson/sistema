@@ -1,0 +1,459 @@
+package com.example.todo.controllers;
+
+import com.example.todo.domain.user.User;
+import com.example.todo.dto.LoginRequestDTO;
+import com.example.todo.dto.RegisterRequestDTO;
+import com.example.todo.dto.ResponseDTO;
+import com.example.todo.infra.security.TokenService;
+import com.example.todo.repositories.UserRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Optional;
+
+@RestController
+@RequestMapping("/auth")
+@RequiredArgsConstructor
+public class AuthController {
+    @Autowired
+    private UserRepository repository;
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+    @Autowired
+    private TokenService tokenService;
+
+    @PostMapping("/login")
+    public ResponseEntity login(@RequestBody LoginRequestDTO body){
+        User user2 = this.repository.findByEmail(body.email()).orElseThrow(() -> new RuntimeException("User not found"));
+        if(passwordEncoder.matches(body.password(), user2.getPassword())) {
+            String token = this.tokenService.generateToken(user2);
+            return ResponseEntity.ok(new ResponseDTO(user2.getName(), token));
+        }
+        return ResponseEntity.badRequest().build();
+    }
+
+
+    @PostMapping("/register")
+    public ResponseEntity register(@RequestBody RegisterRequestDTO body){
+        Optional<User> user = this.repository.findByEmail(body.email());
+
+        if(user.isEmpty()) {
+            User newUser = new User();
+            newUser.setPassword(passwordEncoder.encode(body.password()));
+            newUser.setEmail(body.email());
+            newUser.setName(body.name());
+            this.repository.save(newUser);
+
+            String token = this.tokenService.generateToken(newUser);
+            return ResponseEntity.ok(new ResponseDTO(newUser.getName(), token));
+        }
+        return ResponseEntity.badRequest().build();
+    }
+}
+
+package com.example.todo.controllers;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/user")
+public class UserController {
+    @GetMapping
+    public ResponseEntity<String> getUser(){
+        return ResponseEntity.ok("sucesso!");
+    }
+}
+
+package com.example.todo.domain.user;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@Entity
+@Table(name = "users")
+//@Getter
+//@Setter
+//@AllArgsConstructor
+//@NoArgsConstructor
+public class User {
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private String id;
+    private String name;
+    private String email;
+    private String password;
+
+    public User() {
+    }
+    public User(String id,String name, String email, String password) {
+        this.id= id;
+        this.name = name;
+        this.email = email;
+        this.password = password;
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+}
+package com.example.todo.dto;
+
+public record LoginRequestDTO (String email, String password){}
+
+
+package com.example.todo.dto;
+
+public record RegisterRequestDTO (String name, String email, String password) {
+}
+package com.example.todo.dto;
+
+
+public record ResponseDTO (String name, String token) { }
+
+
+
+package com.example.todo.infra.security;
+
+import com.example.todo.domain.user.User;
+import com.example.todo.repositories.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
+
+@Component
+public class CustomUserDetailsService implements UserDetailsService {
+    @Autowired
+    private UserRepository repository;
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        User user = this.repository.findByEmail(username).orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        return new org.springframework.security.core.userdetails.User(user.getEmail(), user.getPassword(), new ArrayList<>());
+    }
+}
+
+package com.example.todo.infra.security;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+import java.util.List;
+
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+
+    @Autowired
+    private CustomUserDetailsService userDetailsService;
+
+    @Autowired
+    private SecurityFilter securityFilter;
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .csrf(csrf -> csrf.disable())
+                .cors(cors -> cors.configurationSource(request -> {
+                    var configuration = new org.springframework.web.cors.CorsConfiguration();
+
+                    configuration.setAllowedOrigins(List.of("http://localhost:50000")); // Porta do seu Flutter Web
+                    configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+                    configuration.setAllowedHeaders(List.of("Content-Type", "Authorization"));
+                    configuration.setExposedHeaders(List.of("Authorization")); // se for necessário ler o token
+                    //configuration.setAllowCredentials(true); // importante se estiver usando auth
+
+                    return configuration;
+                }))
+
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/auth/register").permitAll()
+                        .anyRequest().authenticated()
+                )
+                .addFilterBefore(securityFilter, UsernamePasswordAuthenticationFilter.class);
+
+        return http.build();
+    }
+
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration authenticationConfiguration) throws Exception {
+        return authenticationConfiguration.getAuthenticationManager();
+    }
+}
+
+package com.example.todo.infra.security;
+
+import com.example.todo.domain.user.User;
+import com.example.todo.repositories.UserRepository;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+import java.util.Collections;
+
+@Component
+public class SecurityFilter extends OncePerRequestFilter {
+    @Autowired
+    private TokenService tokenService;
+    @Autowired
+    private UserRepository userRepository;
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+        var token = this.recoverToken(request);
+        var login = tokenService.validateToken(token);
+
+        if(login != null){
+            User user = userRepository.findByEmail(login).orElseThrow(() -> new RuntimeException("User Not Found"));
+            var authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"));
+            var authentication = new UsernamePasswordAuthenticationToken(user, null, authorities);
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+        }
+        filterChain.doFilter(request, response);
+    }
+
+    private String recoverToken(HttpServletRequest request){
+        var authHeader = request.getHeader("Authorization");
+        if(authHeader == null) return null;
+        return authHeader.replace("Bearer ", "");
+    }
+}
+
+package com.example.todo.infra.security;
+
+import com.auth0.jwt.JWT;
+import com.auth0.jwt.algorithms.Algorithm;
+import com.auth0.jwt.exceptions.JWTCreationException;
+import com.auth0.jwt.exceptions.JWTVerificationException;
+import com.example.todo.domain.user.User;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+
+@Service
+public class TokenService {
+
+    @Value("${api.security.token.secret}")
+    private String secret;
+
+    public String generateToken(User user) {
+        try {
+            Algorithm algorithm = Algorithm.HMAC256(secret);
+            return JWT.create()
+                    .withIssuer("auth-api")
+                    .withSubject(user.getEmail())
+                    .withExpiresAt(generateExpirationDate())
+                    .sign(algorithm);
+        } catch (JWTCreationException exception) {
+            throw new RuntimeException("Error while generating token", exception);
+        }
+    }
+
+    public String validateToken(String token) {
+        try {
+            Algorithm algorithm = Algorithm.HMAC256(secret);
+            return JWT.require(algorithm)
+                    .withIssuer("auth-api")
+                    .build()
+                    .verify(token)
+                    .getSubject();
+        } catch (JWTVerificationException exception) {
+            return null;
+        }
+    }
+
+    private Instant generateExpirationDate() {
+        return LocalDateTime.now().plusHours(2).toInstant(ZoneOffset.of("-03:00")); // horário de Brasília
+    }
+}
+package com.example.todo.repositories;
+
+
+import com.example.todo.domain.user.User;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.Optional;
+
+public interface UserRepository extends JpaRepository<User, String> {
+    Optional<User> findByEmail(String email);
+}
+
+package com.example.todo.Task;
+
+import jakarta.validation.Valid;
+import lombok.Getter;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping(path = "/tasks")
+public class TaskController {
+
+    @Autowired
+    private TaskRepository taskRepository;
+
+    @GetMapping
+    public List<TaskItem> getTasks(){
+        return taskRepository.findAll();
+    }
+    @PostMapping("/add")
+    public TaskItem addTask (@Valid @RequestBody TaskItem taskItem){
+        System.out.println(taskItem.getTitle()); // Para verificar o valor de title
+        return taskRepository.save(taskItem);
+    }
+
+    @PutMapping("/update/{id}")
+    public ResponseEntity updateTask(@PathVariable Long id){
+        boolean exist = taskRepository.existsById(id);
+        if (exist){
+            TaskItem task = taskRepository.getById(id);
+            boolean done = task.isDone();
+            task.setDone(!done);
+            taskRepository.save(task);
+            return new ResponseEntity<>("Task is updated", HttpStatus.OK);
+        }
+        return new ResponseEntity<>("Task is not exist", HttpStatus.BAD_REQUEST);
+    }
+
+    @DeleteMapping("/delete/{id}")
+    public ResponseEntity deleteTask (@PathVariable Long id){
+        boolean exist = taskRepository.existsById(id);
+        if (exist){
+            taskRepository.deleteById(id);
+            return new ResponseEntity<>("Task is delete", HttpStatus.OK);
+        }
+        return new ResponseEntity<>("Task is not exist", HttpStatus.BAD_REQUEST);
+    }
+}
+package com.example.todo.Task;
+
+import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
+
+@Entity
+public class TaskItem {
+    @Id
+    @GeneratedValue(strategy = GenerationType.AUTO)
+    private long id;
+
+    @NotBlank(message = "title is required")
+    private String title;
+
+    private boolean done;
+
+    public TaskItem(long id, String title, boolean done) {
+        this.id = id;
+        this.title = title;
+        this.done = done;
+    }
+    public TaskItem() {
+    }
+
+    public long getId() {
+        return id;
+    }
+
+    public void setId(long id) {
+        this.id = id;
+    }
+
+    public String getTitle() {
+        return title;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
+    }
+
+    public boolean isDone() {
+        return done;
+    }
+
+    public void setDone(boolean done) {
+        this.done = done;
+    }
+}
+
+package com.example.todo.Task;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface TaskRepository extends JpaRepository<TaskItem,Long> {
+}
+
+

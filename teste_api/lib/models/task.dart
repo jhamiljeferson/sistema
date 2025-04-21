@@ -7,9 +7,9 @@ class Task {
 
   factory Task.fromJson(Map<String, dynamic> json) {
     return Task(
-      id: json['id'],
-      title: json['title'],
-      completed: json['completed'],
+      id: json['id']?.toString() ?? '',
+      title: json['title'] ?? '',
+      completed: json['completed'] ?? false,
     );
   }
 }
