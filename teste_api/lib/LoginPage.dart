@@ -13,8 +13,7 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final TextEditingController emailCtrl = TextEditingController();
   final TextEditingController passCtrl = TextEditingController();
-  final String loginUrl =
-      'https://97a9-187-255-42-37.ngrok-free.app/auth/login';
+  final String loginUrl = 'https://localhost:9191/auth/login';
 
   Future<void> _login() async {
     try {
