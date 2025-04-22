@@ -1,0 +1,6 @@
+o back e front ja esta se comunicando 
+
+e no final foi adicioado somente no back o regestitr.
+precisa fazer o front para o registe.
+
+aidna não foi feito o login 
