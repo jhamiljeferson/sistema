@@ -1,57 +1,54 @@
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
-import 'task_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
-
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  _LoginScreenState createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final emailCtrl = TextEditingController();
-  final passCtrl = TextEditingController();
-  bool error = false;
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _loading = false;
+
+  Future<void> _login() async {
+    setState(() => _loading = true);
+    final auth = Provider.of<AuthService>(context, listen: false);
+    bool success = await auth.login(
+      _emailController.text,
+      _passwordController.text,
+    );
+    setState(() => _loading = false);
+
+    if (!success) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Login falhou!")));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final auth = Provider.of<AuthService>(context);
-
     return Scaffold(
-      appBar: AppBar(title: const Text("Login")),
+      appBar: AppBar(title: Text("Login")),
       body: Padding(
-        padding: const EdgeInsets.all(20.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
             TextField(
-              controller: emailCtrl,
-              decoration: const InputDecoration(labelText: "Email"),
+              controller: _emailController,
+              decoration: InputDecoration(labelText: "Email"),
             ),
             TextField(
-              controller: passCtrl,
-              decoration: const InputDecoration(labelText: "Senha"),
+              controller: _passwordController,
+              decoration: InputDecoration(labelText: "Senha"),
               obscureText: true,
             ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () async {
-                bool success = await auth.login(emailCtrl.text, passCtrl.text);
-                if (success) {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (_) => const TaskScreen()),
-                  );
-                } else {
-                  setState(() => error = true);
-                }
-              },
-              child: const Text("Entrar"),
-            ),
-            if (error)
-              const Text("Erro no login", style: TextStyle(color: Colors.red)),
+            SizedBox(height: 20),
+            _loading
+                ? CircularProgressIndicator()
+                : ElevatedButton(onPressed: _login, child: Text("Entrar")),
           ],
         ),
       ),

@@ -22,13 +22,13 @@ public class TaskController {
     public List<TaskItem> getTasks(){
         return taskRepository.findAll();
     }
-    @PostMapping("/add")
+    @PostMapping
     public TaskItem addTask (@Valid @RequestBody TaskItem taskItem){
         System.out.println(taskItem.getTitle()); // Para verificar o valor de title
         return taskRepository.save(taskItem);
     }
 
-    @PutMapping("/update/{id}")
+    @PutMapping("/{id}")
     public ResponseEntity updateTask(@PathVariable Long id){
         boolean exist = taskRepository.existsById(id);
         if (exist){
@@ -41,7 +41,7 @@ public class TaskController {
         return new ResponseEntity<>("Task is not exist", HttpStatus.BAD_REQUEST);
     }
 
-    @DeleteMapping("/delete/{id}")
+    @DeleteMapping("/{id}")
     public ResponseEntity deleteTask (@PathVariable Long id){
         boolean exist = taskRepository.existsById(id);
         if (exist){
